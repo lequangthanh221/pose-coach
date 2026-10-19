@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pose Coach">
+<meta name="theme-color" content="#07080b">
+<meta name="color-scheme" content="dark">
+<title>Pose Coach</title>
+<style>
+:root{
+  --bg:#07080b;
+  --ink:#f5f6f8;
+  --ink-2:rgba(245,246,248,.72);
+  --ink-3:rgba(245,246,248,.5);
+  --glass:rgba(255,255,255,.10);
+  --glass-hi:rgba(255,255,255,.18);
+  --stroke:rgba(255,255,255,.22);
+  --tint:#ffd27a;
+  --tint-ink:#1b1306;
+  --r-xl:34px; --r-lg:26px; --r-md:18px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+body{min-height:100vh;overflow-x:hidden}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+img{display:block}
+
+/* ambient backdrop: blurred photo wash behind everything */
+.ambient{position:fixed;inset:-10%;z-index:0;background-size:cover;background-position:center;filter:blur(60px) saturate(1.5) brightness(.55);transform:scale(1.1);transition:background-image .6s}
+.ambient::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,transparent,rgba(7,8,11,.75) 70%)}
+
+/* Liquid Glass material */
+.glass{
+  position:relative;isolation:isolate;
+  background:linear-gradient(160deg,var(--glass-hi),var(--glass) 45%,rgba(255,255,255,.06));
+  -webkit-backdrop-filter:blur(26px) saturate(190%);backdrop-filter:blur(26px) saturate(190%);
+  border:1px solid var(--stroke);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 1px rgba(255,255,255,.12),inset 0 0 18px rgba(255,255,255,.06),0 10px 30px rgba(0,0,0,.35);
+}
+.glass::before{ /* specular rim */
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+  background:radial-gradient(120% 60% at 20% 0%,rgba(255,255,255,.28),transparent 55%),radial-gradient(80% 50% at 100% 100%,rgba(255,255,255,.10),transparent 60%);
+}
+.glass.clear{background:rgba(255,255,255,.06)}
+
+.app{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 18px) 16px 140px}
+
+/* header */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:8px 4px 16px}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--ink-3);text-transform:uppercase}
+h1{font-size:40px;line-height:1.05;font-weight:800;letter-spacing:-.02em;margin:4px 0 0}
+.icon-btn{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex:none}
+.icon-btn svg{width:22px;height:22px}
+
+/* chips */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 12px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+/* hint that the row continues: fade the edge that still has content */
+.hscroll{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);cursor:grab}
+.hscroll.mid{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent)}
+.hscroll.end{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px);mask-image:linear-gradient(90deg,transparent,#000 36px)}
+.hscroll.fit{-webkit-mask-image:none;mask-image:none;cursor:auto}
+.hscroll.dragging{cursor:grabbing;user-select:none}
+.chip{flex:none;height:38px;padding:0 16px;border-radius:999px;font-size:15px;font-weight:600;color:var(--ink-2);transition:transform .2s,background .2s}
+.chip:active{transform:scale(.95)}
+.chip[aria-pressed="true"]{background:var(--tint);color:var(--tint-ink);border-color:transparent;box-shadow:0 6px 20px rgba(255,210,122,.3)}
+.chip[aria-pressed="true"]::before{display:none}
+.filter-label{font-size:12px;color:var(--ink-3);margin:2px 6px 0;font-weight:600}
+
+/* grid */
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:6px}
+@media(min-width:720px){.grid{grid-template-columns:repeat(3,1fr);gap:16px}}
+@media(min-width:1000px){.grid{grid-template-columns:repeat(4,1fr)}}
+.card{position:relative;border-radius:var(--r-lg);overflow:hidden;aspect-ratio:3/4.3;background:#15171c;text-align:left;transition:transform .25s cubic-bezier(.3,.7,.4,1)}
+.card:active{transform:scale(.97)}
+.card img{width:100%;height:100%;object-fit:cover}
+.card .label{position:absolute;left:8px;right:8px;bottom:8px;border-radius:20px;padding:10px 12px}
+/* darker glass on cards so white text stays readable over bright photos */
+.card .label.glass{background:linear-gradient(160deg,rgba(28,28,34,.42),rgba(14,14,18,.62));text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.card .name{font-size:15px;font-weight:700;line-height:1.2}
+.card .meta{display:flex;align-items:center;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--ink-2)}
+.card .id{position:absolute;top:10px;left:10px;font-size:11px;font-weight:700;padding:5px 9px;border-radius:999px}
+.dots{display:inline-flex;gap:3px}
+.dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.25)}
+.dots i.on{background:var(--tint)}
+.empty{grid-column:1/-1;text-align:center;color:var(--ink-3);padding:60px 0}
+
+/* tab bar */
+.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 16px);z-index:20;display:flex;gap:10px;align-items:center}
+.tabs{display:flex;border-radius:999px;padding:5px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:78px;padding:7px 12px;border-radius:999px;font-size:11px;font-weight:600;color:var(--ink-2)}
+.tab svg{width:24px;height:24px}
+.tab[aria-selected="true"]{background:rgba(255,255,255,.16);color:var(--tint)}
+.fab{width:62px;height:62px;border-radius:50%;display:grid;place-items:center}
+.fab svg{width:26px;height:26px}
+
+/* sheet */
+.scrim{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .3s}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:50%;bottom:0;z-index:31;width:min(720px,100%);max-height:92vh;overflow-y:auto;border-radius:var(--r-xl) var(--r-xl) 0 0;transform:translate(-50%,105%);transition:transform .45s cubic-bezier(.2,.8,.2,1);padding:10px 0 40px;background:rgba(22,24,30,.55);overscroll-behavior:contain}
+.sheet.on{transform:translate(-50%,0)}
+.grab{width:42px;height:5px;border-radius:3px;background:rgba(255,255,255,.35);margin:0 auto 10px}
+.sheet .hero{position:relative;margin:0 12px;border-radius:var(--r-lg);overflow:hidden}
+.slides{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.slides::-webkit-scrollbar{display:none}
+.slides{cursor:grab;touch-action:pan-x pan-y}
+.slides.dragging{cursor:grabbing;user-select:none}
+.slides img{flex:0 0 100%;width:100%;height:min(62vh,560px);object-fit:cover;scroll-snap-align:center;scroll-snap-stop:always}
+.sheet .hero .close{position:absolute;top:10px;right:10px}
+.sheet .hero .foot{position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:8px;align-items:center}
+.sheet .hero .src{flex:none;font-size:12px;font-weight:600;padding:7px 12px;border-radius:999px;color:var(--ink);text-decoration:none}
+.sheet .hero .count{position:absolute;top:14px;left:12px;font-size:12px;font-weight:700;padding:6px 10px;border-radius:999px}
+.strip{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;padding:5px;border-radius:16px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.strip button{flex:none;width:38px;height:48px;border-radius:10px;overflow:hidden;opacity:.6;transition:opacity .2s,transform .2s;box-shadow:0 0 0 1px rgba(255,255,255,.25)}
+.strip button img{width:100%;height:100%;object-fit:cover}
+.strip button[aria-current="true"]{opacity:1;box-shadow:0 0 0 2px var(--tint);transform:translateY(-2px)}
+.sec{padding:18px 20px 0}
+.sec h2{font-size:28px;font-weight:800;letter-spacing:-.01em;margin:0}
+.sec h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin:0 0 10px;font-weight:700}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tag{font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;color:var(--ink-2)}
+.anchor{margin:16px 20px 0;padding:16px 18px;border-radius:var(--r-md);display:flex;gap:12px;align-items:flex-start;background:linear-gradient(160deg,rgba(255,210,122,.30),rgba(255,210,122,.10));border-color:rgba(255,210,122,.45)}
+.anchor b{display:block;font-size:12px;color:var(--tint);letter-spacing:.04em;text-transform:uppercase;margin-bottom:3px}
+.anchor span{font-size:18px;font-weight:700;line-height:1.3}
+.panel{border-radius:var(--r-md);padding:4px 16px}
+.row{display:grid;grid-template-columns:96px 1fr;gap:10px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:15px;line-height:1.4}
+.row:last-child{border-bottom:0}
+.row dt{color:var(--ink-3);font-weight:600;font-size:13px;padding-top:2px}
+.row dd{margin:0}
+.who{font-size:14px;font-weight:700;color:var(--tint);margin:14px 0 4px}
+.say{display:grid;gap:10px}
+.line{border-radius:var(--r-md);padding:14px 16px}
+.line small{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.line p{margin:0;font-size:16px;line-height:1.45}
+.line.main{background:linear-gradient(160deg,rgba(255,255,255,.24),rgba(255,255,255,.10))}
+.line.main p{font-size:20px;font-weight:700;line-height:1.35}
+.mistakes{margin:0;padding-left:18px;color:var(--ink-2);font-size:15px;line-height:1.5}
+.next{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.next button{flex:none;width:120px;text-align:left}
+.next img{width:120px;height:150px;object-fit:cover;border-radius:16px}
+.next span{display:block;font-size:13px;font-weight:600;margin-top:6px;line-height:1.25}
+.next em{font-style:normal;font-size:11px;color:var(--tint);font-weight:700}
+
+/* chains */
+.chain{border-radius:var(--r-xl);padding:18px;margin-bottom:16px}
+.chain-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.chain h2{font-size:24px;margin:2px 0 0;font-weight:800}
+.go{height:44px;padding:0 18px;border-radius:999px;background:var(--tint);color:var(--tint-ink);font-weight:700;font-size:15px;flex:none;box-shadow:0 6px 20px rgba(255,210,122,.3)}
+.curve{margin:14px 0 6px;height:54px;width:100%}
+.steps{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 4px}
+.step{flex:none;width:150px;text-align:left}
+.step .ph{position:relative;border-radius:18px;overflow:hidden;height:190px}
+.step img{width:100%;height:100%;object-fit:cover}
+.step .n{position:absolute;top:8px;left:8px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:800}
+.step .chg{position:absolute;bottom:8px;left:8px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px}
+.step p{margin:8px 2px 0;font-size:13px;line-height:1.35;color:var(--ink-2)}
+
+/* lines tab */
+.group{border-radius:var(--r-xl);padding:8px 18px 10px;margin-bottom:14px}
+.group h2{font-size:20px;margin:12px 0 4px}
+.group ol{margin:0;padding:0;list-style:none;counter-reset:l}
+.group li{counter-increment:l;display:grid;grid-template-columns:28px 1fr;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:16px;line-height:1.45}
+.group li:last-child{border-bottom:0}
+.group li::before{content:counter(l);color:var(--ink-3);font-weight:700;font-size:13px;padding-top:3px}
+
+/* field mode */
+.field{position:fixed;inset:0;z-index:50;background:#000;display:none;touch-action:pan-y}
+.field.on{display:block}
+.field .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .35s}
+.field .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.45),transparent 22%,transparent 45%,rgba(0,0,0,.6))}
+.field .bar{position:absolute;top:calc(env(safe-area-inset-top) + 14px);left:14px;right:14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.field .crumb{height:44px;border-radius:999px;padding:0 16px;display:flex;align-items:center;font-size:14px;font-weight:700;gap:10px;min-width:0}
+.field .crumb span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog{display:flex;gap:4px;position:absolute;top:calc(env(safe-area-inset-top) + 68px);left:18px;right:18px}
+.prog i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3)}
+.prog i.on{background:#fff}
+.field .card2{position:absolute;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);border-radius:var(--r-xl);padding:18px 18px 14px;max-width:640px;margin:0 auto;background:rgba(20,22,28,.35)}
+.field .neo{display:flex;gap:8px;align-items:center;font-size:15px;font-weight:700;color:var(--tint)}
+.field .big{font-size:26px;line-height:1.3;font-weight:750;margin:10px 0 6px;letter-spacing:-.005em}
+.field .more{font-size:15px;line-height:1.45;color:var(--ink-2);display:none;margin:6px 0 4px}
+.field .more.on{display:block}
+.field .more b{color:var(--ink)}
+.field .acts{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px}
+.field .acts button{height:50px;border-radius:999px;padding:0 18px;font-weight:700;font-size:15px}
+.field .star[aria-pressed="true"]{background:var(--tint);color:var(--tint-ink)}
+.tapzone{position:absolute;top:120px;bottom:300px;width:35%}
+.tapzone.l{left:0}.tapzone.r{right:0}
+
+/* settings form */
+.form{display:grid;gap:12px;padding:6px 20px 10px}
+.form label{display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--ink-3)}
+.form input{height:50px;border-radius:16px;padding:0 16px;font:inherit;font-size:17px;color:var(--ink);background:rgba(255,255,255,.08);border:1px solid var(--stroke);outline:none}
+.form input:focus{border-color:var(--tint)}
+.hint{font-size:13px;color:var(--ink-3);padding:0 20px;line-height:1.5}
+
+.view{display:none}.view.on{display:block;animation:in .35s ease}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="ambient" id="ambient"></div>
+
+<main class="app">
+  <!-- LIBRARY -->
+  <section class="view on" id="v-lib">
+    <div class="top">
+      <div><div class="eyebrow">Pose Coach · Giai đoạn 1</div><h1>Thư viện</h1></div>
+      <button class="icon-btn glass" data-open="settings" aria-label="Xưng hô">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3 3-4.6 5.5-4.6s4.7 1.6 5.5 4.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.6c2.3 0 4 1.3 4.6 3.6"/></svg>
+      </button>
+    </div>
+    <div class="filter-label">Chủ đề</div>
+    <div class="chips" id="f-topic"></div>
+    <div class="filter-label">Bối cảnh</div>
+    <div class="chips" id="f-place"></div>
+    <div class="filter-label">Đối tượng</div>
+    <div class="chips" id="f-who"></div>
+    <div class="filter-label">Mức thân mật tối đa</div>
+    <div class="chips" id="f-intim"></div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <!-- CHAINS -->
+  <section class="view" id="v-chain">
+    <div class="top"><div><div class="eyebrow">Đổi một thứ mỗi bước</div><h1>Chuỗi pose</h1></div></div>
+    <div id="chains"></div>
+  </section>
+
+  <!-- LINES -->
+  <section class="view" id="v-lines">
+    <div class="top"><div><div class="eyebrow" id="lines-count">Câu dùng chung</div><h1>Câu dẫn</h1></div>
+      <button class="icon-btn glass" data-open="settings" aria-label="Xưng hô">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3 3-4.6 5.5-4.6s4.7 1.6 5.5 4.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.6c2.3 0 4 1.3 4.6 3.6"/></svg>
+      </button>
+    </div>
+    <div id="lines"></div>
+  </section>
+</main>
+
+<!-- tab bar -->
+<nav class="tabbar">
+  <div class="tabs glass" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-view="v-lib">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="7" height="9" rx="2"/><rect x="13.5" y="3.5" width="7" height="6" rx="2"/><rect x="3.5" y="15.5" width="7" height="5" rx="2"/><rect x="13.5" y="12.5" width="7" height="8" rx="2"/></svg>Thư viện</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="v-chain">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="17" r="2"/><circle cx="12" cy="9" r="2"/><circle cx="19" cy="14" r="2"/><path d="M6.4 15.6 10.6 10.4M13.7 10.1l3.6 2.8"/></svg>Chuỗi</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="v-lines">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5.5h16v10H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5" stroke-linecap="round"/></svg>Câu dẫn</button>
+  </div>
+  <button class="fab glass" id="fab" aria-label="Chế độ hiện trường">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v10H4z"/><circle cx="12" cy="13" r="3.3"/></svg>
+  </button>
+</nav>
+
+<!-- sheets -->
+<div class="scrim" id="scrim"></div>
+<div class="sheet glass" id="sheet" role="dialog" aria-modal="true"></div>
+
+<!-- field mode -->
+<div class="field" id="field">
+  <img class="bgimg" id="f-img" alt="">
+  <div class="shade"></div>
+  <div class="tapzone l" id="tz-l"></div><div class="tapzone r" id="tz-r"></div>
+  <div class="bar">
+    <div class="crumb glass"><span id="f-crumb"></span></div>
+    <button class="icon-btn glass" id="f-close" aria-label="Thoát">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="prog" id="f-prog"></div>
+  <div class="card2 glass">
+    <div class="neo"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 22 12 12 22 2 12z"/></svg><span id="f-neo"></span></div>
+    <div class="big" id="f-big"></div>
+    <div class="more" id="f-more"></div>
+    <div class="acts">
+      <button class="glass" id="f-rescue">Cứu đơ</button>
+      <button class="glass star" id="f-star" aria-pressed="false" aria-label="Đánh dấu đẹp">★</button>
+      <button class="glass" id="f-toggle">Đặt · Bắt</button>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script>
+const D = window.POSE_DATA;
+const byId = Object.fromEntries(D.poses.map(p => [p.id, p]));
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* xưng hô */
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d } catch(e){ return d } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)) } catch(e){} }
+};
+let names = store.get('pc-names', {nam:'anh', nu:'chị', cap:'hai bạn'});
+function say(s){
+  const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+  return esc(s).replace(/\[(nam|nữ|cặp)\]/g, (m, k, i, str) => {
+    const v = k === 'nam' ? names.nam : k === 'nữ' ? names.nu : names.cap;
+    const start = i === 0 || /[.!?]\s*$/.test(str.slice(0, i));
+    return start ? cap(v) : v;
+  });
+}
+
+/* filters */
+const F = { topic:'Tất cả', place:'Tất cả', who:'Tất cả', intim:5 };
+function chips(el, opts, key, fmt = x => x){
+  el.innerHTML = opts.map(o => `<button class="chip glass" aria-pressed="${F[key]===o}" data-v="${o}">${fmt(o)}</button>`).join('');
+  el.onclick = e => { const b = e.target.closest('.chip'); if(!b) return;
+    F[key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; chips(el, opts, key, fmt); renderGrid(); };
+}
+chips($('#f-topic'), ['Tất cả','Pre-wedding','Tiệc cưới','Couple','Kỷ yếu'], 'topic', x => x === 'Couple' ? 'Couple / cá nhân' : x);
+chips($('#f-place'), ['Tất cả','Ngoại cảnh','Studio','Nhà hàng'], 'place');
+chips($('#f-who'), ['Tất cả','Cặp đôi','Cô dâu','Chú rể','Nhóm','Cá nhân'], 'who');
+chips($('#f-intim'), [1,2,3,4,5], 'intim', x => ['','1 · Không chạm','2 · Chạm nhẹ','3 · Gần gũi','4 · Thân mật','5 · Rất thân mật'][x]);
+
+const dots = (n, p) => n == null ? `<span>${esc(p.doi_tuong || '')}</span>` : `<span class="dots">${[1,2,3,4,5].map(i => `<i class="${i<=n?'on':''}"></i>`).join('')}</span>`;
+
+function renderGrid(){
+  const list = D.poses.filter(p =>
+    (F.topic === 'Tất cả' || p.chu_de.includes(F.topic)) &&
+    (F.who === 'Tất cả' || p.doi_tuong === F.who) &&
+    (F.place === 'Tất cả' || p.boi_canh.includes(F.place)) &&
+    (p.than_mat == null || p.than_mat <= F.intim));
+  $('#grid').innerHTML = list.length ? list.map(p => `
+    <button class="card" data-pose="${p.id}">
+      <img src="${p.anh}" alt="${esc(p.ten)}" loading="lazy" referrerpolicy="no-referrer">
+      <span class="id glass">${p.id}</span>
+      <div class="label glass">
+        <div class="name">${esc(p.ten)}</div>
+        <div class="meta"><span>${esc(p.nhip)}</span>${dots(p.than_mat, p)}</div>
+      </div>
+    </button>`).join('') : '<div class="empty">Không có pose nào khớp bộ lọc.</div>';
+}
+
+/* sheet */
+function openSheet(html){ $('#sheet').innerHTML = '<div class="grab"></div>' + html; $('#sheet').scrollTop = 0;
+  $('#sheet').classList.add('on'); $('#scrim').classList.add('on'); }
+function closeSheet(){ $('#sheet').classList.remove('on'); $('#scrim').classList.remove('on'); }
+$('#scrim').onclick = closeSheet;
+
+const closeBtn = `<button class="icon-btn glass close" data-close aria-label="Đóng"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`;
+const LABEL = {tay:'Tay', chan:'Chân', mat:'Hướng mặt', anh_mat:'Ánh mắt'};
+
+function poseSheet(id){
+  const p = byId[id];
+  const gallery = [p.anh, ...(p.anh_them || [])];
+  $('#ambient').style.backgroundImage = `url(${p.anh})`;
+  const body = p.doi_hinh
+    ? `<div class="panel glass clear"><dl style="margin:0">
+         <div class="row"><dt>Đội hình</dt><dd>${esc(p.doi_hinh.kieu)}</dd></div>
+         <div class="row"><dt>Vị trí</dt><dd>${esc(p.doi_hinh.vi_tri)}</dd></div>
+         <div class="row"><dt>Quy tắc</dt><dd>${esc(p.doi_hinh.quy_tac)}</dd></div></dl></div>`
+    : Object.entries(p.co_the).map(([who, b]) => `<div class="who">${esc(who)}</div>
+       <div class="panel glass clear"><dl style="margin:0">${Object.entries(LABEL).map(([k, l]) => `<div class="row"><dt>${l}</dt><dd>${esc(b[k])}</dd></div>`).join('')}</dl></div>`).join('')
+      + `<div class="who">Tương tác</div><div class="panel glass clear"><div class="row" style="grid-template-columns:1fr"><dd>${esc(p.tuong_tac)}</dd></div></div>`;
+  const next = p.ke_tiep.length ? `<div class="sec"><h3>Pose kế tiếp</h3><div class="next">${p.ke_tiep.map(n => `
+      <button data-pose="${n.id}"><img src="${byId[n.id].anh}" alt="" referrerpolicy="no-referrer"><em>Đổi ${esc(n.doi.toLowerCase())}</em><span>${esc(byId[n.id].ten)}</span></button>`).join('')}</div></div>` : '';
+  openSheet(`
+    <div class="hero"><div class="slides" id="slides">${gallery.map((u, i) => `<img src="${u}" alt="${esc(p.ten)} ${i + 1}" ${i > 1 ? 'loading="lazy"' : ''} referrerpolicy="no-referrer" draggable="false">`).join('')}</div>${closeBtn}
+      <span class="count glass" id="hero-count">1/${gallery.length}</span>
+      <div class="foot">
+        <a class="src glass" href="${p.nguon}" target="_blank" rel="noopener">Nguồn Pinterest ↗</a>
+        <div class="strip glass" id="strip" aria-label="Ảnh cùng mood">${gallery.map((u, i) => `
+          <button data-shot="${i}" aria-current="${i === 0}" aria-label="Ảnh ${i + 1}"><img src="${u}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div>
+      </div></div>
+    <div class="sec"><div class="eyebrow">${p.id} · ${esc(p.tu_the)}</div><h2>${esc(p.ten)}</h2>
+      <div class="tags">${[...p.chu_de, ...p.boi_canh, p.doi_tuong, p.so_nguoi === '1' || p.so_nguoi === '2' ? p.so_nguoi + ' người' : p.so_nguoi, p.nhip, 'Độ khó: ' + p.do_kho, p.than_mat ? 'Thân mật ' + p.than_mat : null].filter(Boolean).map(t => `<span class="tag glass clear">${esc(t)}</span>`).join('')}</div>
+      <div class="tags">${p.trang_phuc.map(t => `<span class="tag glass clear">👗 ${esc(t)}</span>`).join('')}</div></div>
+    <div class="anchor glass"><div><b>Điểm neo</b><span>${esc(p.diem_neo)}</span></div></div>
+    <div class="sec"><h3>Câu dẫn</h3><div class="say">
+      <div class="line glass clear"><small>Đặt</small><p>${say(p.dat)}</p></div>
+      <div class="line glass main"><small>Dẫn</small><p>${say(p.dan)}</p></div>
+      <div class="line glass clear"><small>Bắt</small><p>${say(p.bat)}</p></div>
+      <div class="line glass clear"><small>${p.doi_hinh ? 'Kiểm tra' : 'Chỉnh trang phục'}</small><p>${say(p.chinh)}</p></div>
+    </div></div>
+    <div class="sec"><h3>Cơ thể</h3>${body}</div>
+    <div class="sec"><h3>Máy ảnh</h3><div class="panel glass clear"><dl style="margin:0">
+      <div class="row"><dt>Khung hình</dt><dd>${esc(p.khung)}</dd></div>
+      <div class="row"><dt>Góc máy</dt><dd>${esc(p.goc)}</dd></div>
+      <div class="row"><dt>Tiêu cự</dt><dd>${esc(p.tieu_cu)}</dd></div></dl></div></div>
+    <div class="sec"><h3>Lỗi hay gặp</h3><ul class="mistakes">${p.loi.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>
+    ${next}
+    <div class="sec" style="padding-bottom:10px"><button class="go" data-field-pose="${p.id}" style="width:100%">Mở ở chế độ hiện trường</button></div>`);
+  const sl = $('#slides'); let cur = 0;
+  sl.addEventListener('scroll', () => {
+    const i = Math.round(sl.scrollLeft / sl.clientWidth);
+    if(i === cur) return; cur = i;
+    $('#hero-count').textContent = `${i + 1}/${gallery.length}`;
+    document.querySelectorAll('#strip button').forEach((b, j) => b.setAttribute('aria-current', j === i));
+    const th = document.querySelectorAll('#strip button')[i], st = $('#strip');
+    if(th) st.scrollTo({left: th.offsetLeft - (st.clientWidth - th.offsetWidth) / 2, behavior:'smooth'});
+  }, {passive:true});
+  // mouse drag: touch and trackpad already swipe natively, a mouse needs this
+  let drag = null;
+  sl.addEventListener('pointerdown', e => {
+    if(e.pointerType !== 'mouse' || e.button !== 0) return;
+    drag = {x: e.clientX, left: sl.scrollLeft, i: Math.round(sl.scrollLeft / sl.clientWidth)};
+    sl.setPointerCapture(e.pointerId); sl.style.scrollSnapType = 'none'; sl.classList.add('dragging');
+  });
+  sl.addEventListener('pointermove', e => { if(drag) sl.scrollLeft = drag.left - (e.clientX - drag.x); });
+  const end = e => {
+    if(!drag) return;
+    const dx = e.clientX - drag.x, n = sl.children.length;
+    const to = Math.max(0, Math.min(n - 1, drag.i + (dx < -40 ? 1 : dx > 40 ? -1 : 0)));
+    drag = null; sl.classList.remove('dragging');
+    sl.scrollTo({left: to * sl.clientWidth, behavior:'smooth'});
+    setTimeout(() => sl.style.scrollSnapType = '', 450);
+  };
+  sl.addEventListener('pointerup', end); sl.addEventListener('pointercancel', end);
+}
+
+function settingsSheet(){
+  openSheet(`<div class="sec" style="display:flex;justify-content:space-between;align-items:center;padding-top:6px"><h2>Xưng hô</h2>${closeBtn.replace(' close','')}</div>
+    <p class="hint">Câu dẫn tự thay theo khách. Gọi tên riêng giúp khách thả lỏng hơn.</p>
+    <form class="form" id="nameform">
+      <label>Nam (thay cho [nam])<input name="nam" value="${esc(names.nam)}" autocomplete="off"></label>
+      <label>Nữ (thay cho [nữ])<input name="nu" value="${esc(names.nu)}" autocomplete="off"></label>
+      <label>Cả hai (thay cho [cặp])<input name="cap" value="${esc(names.cap)}" autocomplete="off"></label>
+      <button class="go" type="submit">Lưu</button>
+    </form>`);
+  $('#nameform').onsubmit = e => { e.preventDefault(); const f = new FormData(e.target);
+    names = {nam: f.get('nam').trim() || 'anh', nu: f.get('nu').trim() || 'chị', cap: f.get('cap').trim() || 'hai bạn'};
+    store.set('pc-names', names); closeSheet(); renderChains(); renderLines(); };
+}
+
+function rescueSheet(){
+  openSheet(`<div class="sec" style="display:flex;justify-content:space-between;align-items:center;padding-top:6px"><h2>Cứu đơ</h2>${closeBtn.replace(' close','')}</div>
+    <div style="padding:10px 16px 0">${linesHTML(['Cứu đơ','Tạo cười','Khen giữ năng lượng'])}</div>`);
+}
+
+/* chains */
+const stepImg = s => s.anh || byId[s.pose].anh;
+function curve(steps){
+  const w = 300, h = 54, n = steps.length;
+  const pts = steps.map((s, i) => [12 + i * (w - 24) / (n - 1), h - 8 - (s.than_mat - 1) * (h - 16) / 4]);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  return `<svg class="curve" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-label="Đường thân mật">
+    <path d="${d}" fill="none" stroke="rgba(255,210,122,.9)" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    ${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="#ffd27a"/>`).join('')}</svg>`;
+}
+function renderChains(){
+  $('#chains').innerHTML = D.chains.map(c => `
+    <article class="chain glass">
+      <div class="chain-head"><div><div class="eyebrow">${esc(c.chu_de)} · ${esc(c.boi_canh)} · ${esc(c.kieu)} · ${c.steps.length} bước</div><h2>${esc(c.ten)}</h2></div>
+        <button class="go" data-field-chain="${c.id}">Hiện trường</button></div>
+      ${c.chu_de === 'Tiệc cưới' ? '<p class="hint" style="padding:10px 0 0">Tiệc cưới đi từ đông về ít, không theo đường cong thân mật.</p>' : curve(c.steps)}
+      <div class="steps">${c.steps.map((s, i) => `
+        <button class="step" ${s.pose ? `data-pose="${s.pose}"` : ''}>
+          <div class="ph"><img src="${stepImg(s)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="n glass">${i + 1}</span><span class="chg glass">${esc(s.doi)}</span></div>
+          <p><b style="color:var(--ink)">${esc(s.dang)}</b><br>${say(s.cau)}</p></button>`).join('')}</div>
+    </article>`).join('');
+}
+
+/* lines */
+function linesHTML(groups){
+  return D.lines.filter(g => !groups || groups.includes(g.nhom)).map(g => `
+    <div class="group glass"><h2>${esc(g.nhom)}</h2><ol>${g.cau.map(c => `<li><span>${say(c)}</span></li>`).join('')}</ol></div>`).join('');
+}
+function renderLines(){ $('#lines').innerHTML = linesHTML();
+  $('#lines-count').textContent = D.lines.reduce((n, g) => n + g.cau.length, 0) + ' câu dùng chung'; }
+
+/* field mode */
+let FS = { steps:[], i:0, title:'' };
+let stars = store.get('pc-stars', {});
+function openField(steps, title){
+  FS = { steps, i:0, title }; $('#field').classList.add('on'); drawField();
+}
+function drawField(){
+  const s = FS.steps[FS.i], p = s.pose ? byId[s.pose] : null;
+  $('#f-img').src = stepImg(s);
+  $('#f-crumb').textContent = `${FS.title}  ${FS.i + 1}/${FS.steps.length}`;
+  $('#f-prog').innerHTML = FS.steps.map((_, i) => `<i class="${i <= FS.i ? 'on' : ''}"></i>`).join('');
+  $('#f-neo').textContent = p ? p.diem_neo : s.dang;
+  $('#f-big').innerHTML = say(s.cau);
+  $('#f-more').innerHTML = p ? `<b>Đặt:</b> ${say(p.dat)}<br><b>Bắt:</b> ${say(p.bat)}` : `<b>Dáng:</b> ${esc(s.dang)}`;
+  $('#f-more').classList.remove('on');
+  const key = FS.title + ':' + FS.i;
+  $('#f-star').setAttribute('aria-pressed', !!stars[key]);
+}
+const step = d => { FS.i = Math.max(0, Math.min(FS.steps.length - 1, FS.i + d)); drawField(); };
+$('#tz-l').onclick = () => step(-1); $('#tz-r').onclick = () => step(1);
+$('#f-close').onclick = () => $('#field').classList.remove('on');
+$('#f-toggle').onclick = () => $('#f-more').classList.toggle('on');
+$('#f-star').onclick = () => { const k = FS.title + ':' + FS.i; stars[k] = !stars[k]; store.set('pc-stars', stars); drawField(); };
+$('#f-rescue').onclick = rescueSheet;
+let tx = null;
+$('#field').addEventListener('touchstart', e => tx = e.touches[0].clientX, {passive:true});
+$('#field').addEventListener('touchend', e => { if(tx == null) return; const dx = e.changedTouches[0].clientX - tx;
+  if(Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); tx = null; });
+document.addEventListener('keydown', e => {
+  if($('#field').classList.contains('on')){ if(e.key === 'ArrowRight') step(1); if(e.key === 'ArrowLeft') step(-1); if(e.key === 'Escape') $('#field').classList.remove('on'); }
+  else if(e.key === 'Escape') closeSheet();
+  else if($('#sheet').classList.contains('on') && $('#slides') && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')){
+    const sl = $('#slides'); sl.scrollBy({left: (e.key === 'ArrowRight' ? 1 : -1) * sl.clientWidth, behavior:'smooth'}); }
+});
+
+/* global clicks */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-shot],[data-pose],[data-close],[data-open],[data-field-chain],[data-field-pose],[data-view]');
+  if(!t) return;
+  if(t.dataset.shot !== undefined){
+    const sl = $('#slides'); sl.scrollTo({left: +t.dataset.shot * sl.clientWidth, behavior:'smooth'});
+    return;
+  }
+  if(t.dataset.close !== undefined) return closeSheet();
+  if(t.dataset.open === 'settings') return settingsSheet();
+  if(t.dataset.fieldChain){ const c = D.chains.find(c => c.id === t.dataset.fieldChain); closeSheet(); return openField(c.steps, c.ten); }
+  if(t.dataset.fieldPose){ const p = byId[t.dataset.fieldPose]; closeSheet();
+    return openField([{pose:p.id, cau:p.dan, dang:p.ten}], p.ten); }
+  if(t.dataset.view){
+    document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b === t));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === t.dataset.view));
+    return window.scrollTo({top:0});
+  }
+  if(t.dataset.pose) return poseSheet(t.dataset.pose);
+});
+$('#fab').onclick = () => openField(D.chains[0].steps, D.chains[0].ten);
+
+/* horizontal rows: mouse wheel + drag on desktop, native swipe on touch */
+function edge(el){
+  const max = el.scrollWidth - el.clientWidth;
+  el.classList.toggle('fit', max <= 1);
+  el.classList.toggle('mid', el.scrollLeft > 4 && el.scrollLeft < max - 4);
+  el.classList.toggle('end', max > 1 && el.scrollLeft >= max - 4);
+}
+function hscroll(){
+  document.querySelectorAll('.chips,.steps,.next,.strip').forEach(el => {
+    if(el.dataset.hs){ edge(el); return; }
+    el.dataset.hs = 1; el.classList.add('hscroll');
+    el.addEventListener('scroll', () => edge(el), {passive:true});
+    el.addEventListener('wheel', e => {
+      if(Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if(max <= 1 || (e.deltaY < 0 && el.scrollLeft <= 0) || (e.deltaY > 0 && el.scrollLeft >= max)) return;
+      e.preventDefault(); el.scrollLeft += e.deltaY;
+    }, {passive:false});
+    let x0 = null, s0 = 0, moved = false;
+    el.addEventListener('pointerdown', e => { if(e.pointerType !== 'mouse') return; x0 = e.clientX; s0 = el.scrollLeft; moved = false; });
+    window.addEventListener('pointermove', e => { if(x0 == null) return; const dx = e.clientX - x0;
+      if(Math.abs(dx) > 5){ moved = true; el.classList.add('dragging'); } if(moved) el.scrollLeft = s0 - dx; });
+    window.addEventListener('pointerup', () => { x0 = null; setTimeout(() => el.classList.remove('dragging')); });
+    el.addEventListener('click', e => { if(moved){ e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+    el.addEventListener('dragstart', e => e.preventDefault());
+    edge(el);
+  });
+}
+window.addEventListener('resize', hscroll);
+new MutationObserver(hscroll).observe(document.body, {childList:true, subtree:true});
+
+$('#ambient').style.backgroundImage = `url(${D.poses[0].anh})`;
+renderGrid(); renderChains(); renderLines(); hscroll();
+</script>
+</body>
+</html>
